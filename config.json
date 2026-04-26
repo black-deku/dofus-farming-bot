@@ -1,0 +1,47 @@
+{
+  "general": {
+    "scan_interval": 0.5,
+    "confidence_threshold": 0.8,
+    "monitor_index": 1,
+    "loop": true,
+    "loop_delay": 5.0,
+    "max_loops": 0,
+    "failsafe": true,
+    "grayscale": true,
+    "detect_mode": "color"
+  },
+  "color_detection": {
+    "target_hsv": [
+      13,
+      125,
+      153
+    ],
+    "target_rgb": [
+      153,
+      111,
+      78
+    ],
+    "tolerance": 25,
+    "min_area": 300,
+    "scan_region": {
+      "x": 599,
+      "y": 34,
+      "w": 1191,
+      "h": 736
+    }
+  },
+  "tasks": [
+    {
+      "name": "Recorded Task",
+      "enabled": true,
+      "reference_image": "./images\\capture_1776910807.png",
+      "confidence": 0.8,
+      "action_on_find": "click",
+      "click_offset": {
+        "x": 0,
+        "y": 0
+      },
+      "post_actions": []
+    }
+  ]
+}
