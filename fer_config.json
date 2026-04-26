@@ -12,7 +12,7 @@
     "iron_hsv_tolerance": 50,
     "collect_offset_x": 40,
     "collect_offset_y": 40,
-    "failsafe": true
+    "failsafe": false
   },
   "maps": [
     {

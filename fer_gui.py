@@ -7,6 +7,7 @@ Press F8/F9 to capture coordinates while the window is open.
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import tkinter as tk
@@ -26,6 +27,7 @@ PRIMARY  = "#7c3aed"
 ACCENT   = "#06b6d4"
 GREEN    = "#22c55e"
 RED      = "#ef4444"
+ORANGE   = "#f59e0b"
 TEXT     = "#e2e8f0"
 DIM      = "#64748b"
 
@@ -45,7 +47,7 @@ DEFAULT_CONFIG = {
         "iron_hsv_tolerance": 50,
         "collect_offset_x": 40,
         "collect_offset_y": 40,
-        "failsafe": True,
+        "failsafe": False,
     },
     "maps": [],
 }
@@ -57,16 +59,20 @@ class FerGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("⛏️ Dofus Farming Manager")
-        self.root.geometry("800x600")
+        self.root.geometry("800x650")
         self.root.configure(bg=BG)
 
         self.config = dict(DEFAULT_CONFIG)
         self.selected_map_idx: int | None = None
         self.capture_mode: str | None = None  # "node" | "transition" | None
+        self.bot_process: subprocess.Popen | None = None
 
         self._load_config()
         self._build_ui()
         self._start_key_listener()
+
+        # Check bot status periodically
+        self._poll_bot_status()
 
     # ── Config I/O ──────────────────────────────────────────────────────────
 
@@ -80,6 +86,23 @@ class FerGUI:
             self.config["general"]["mining_duration"] = float(self.var_mining.get())
         except ValueError:
             pass
+        try:
+            self.config["general"]["collect_offset_x"] = int(self.var_off_x.get())
+        except ValueError:
+            pass
+        try:
+            self.config["general"]["collect_offset_y"] = int(self.var_off_y.get())
+        except ValueError:
+            pass
+        try:
+            self.config["general"]["iron_hsv_tolerance"] = int(self.var_tolerance.get())
+        except ValueError:
+            pass
+        try:
+            self.config["general"]["map_transition_duration"] = float(self.var_trans_dur.get())
+        except ValueError:
+            pass
+        self.config["general"]["failsafe"] = self.var_failsafe.get()
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(self.config, f, indent=2)
 
@@ -135,16 +158,52 @@ class FerGUI:
         self.btn_cap_trans.pack(side="left", expand=True, fill="x", padx=(0, 2))
         tk.Button(bf3, text="❌ Del", bg=SURFACE2, fg=TEXT, command=self._del_trans).pack(side="right", padx=(2, 0))
 
-        # Bottom bar
+        # ── Settings bar ────────────────────────────────────────────────────
+        settings = tk.LabelFrame(self.root, text="Settings", bg=SURFACE, fg=ACCENT, font=FONT_BOLD, bd=1)
+        settings.pack(fill="x", padx=10, pady=(5, 0))
+
+        row1 = tk.Frame(settings, bg=SURFACE)
+        row1.pack(fill="x", padx=5, pady=3)
+
+        gen = self.config["general"]
+
+        tk.Label(row1, text="Mining (s):", bg=SURFACE, fg=TEXT, font=FONT).pack(side="left")
+        self.var_mining = tk.StringVar(value=str(gen.get("mining_duration", 14.0)))
+        tk.Entry(row1, textvariable=self.var_mining, bg=SURFACE2, fg=TEXT, width=5).pack(side="left", padx=(2, 10))
+
+        tk.Label(row1, text="Transition (s):", bg=SURFACE, fg=TEXT, font=FONT).pack(side="left")
+        self.var_trans_dur = tk.StringVar(value=str(gen.get("map_transition_duration", 4.0)))
+        tk.Entry(row1, textvariable=self.var_trans_dur, bg=SURFACE2, fg=TEXT, width=5).pack(side="left", padx=(2, 10))
+
+        tk.Label(row1, text="Tolerance:", bg=SURFACE, fg=TEXT, font=FONT).pack(side="left")
+        self.var_tolerance = tk.StringVar(value=str(gen.get("iron_hsv_tolerance", 50)))
+        tk.Entry(row1, textvariable=self.var_tolerance, bg=SURFACE2, fg=TEXT, width=5).pack(side="left", padx=(2, 10))
+
+        row2 = tk.Frame(settings, bg=SURFACE)
+        row2.pack(fill="x", padx=5, pady=3)
+
+        tk.Label(row2, text="Collect Offset X:", bg=SURFACE, fg=TEXT, font=FONT).pack(side="left")
+        self.var_off_x = tk.StringVar(value=str(gen.get("collect_offset_x", 40)))
+        tk.Entry(row2, textvariable=self.var_off_x, bg=SURFACE2, fg=TEXT, width=5).pack(side="left", padx=(2, 10))
+
+        tk.Label(row2, text="Y:", bg=SURFACE, fg=TEXT, font=FONT).pack(side="left")
+        self.var_off_y = tk.StringVar(value=str(gen.get("collect_offset_y", 40)))
+        tk.Entry(row2, textvariable=self.var_off_y, bg=SURFACE2, fg=TEXT, width=5).pack(side="left", padx=(2, 10))
+
+        self.var_failsafe = tk.BooleanVar(value=gen.get("failsafe", False))
+        tk.Checkbutton(row2, text="Failsafe (corner stop)", variable=self.var_failsafe, bg=SURFACE, fg=TEXT, selectcolor=SURFACE2, activebackground=SURFACE, activeforeground=TEXT, font=FONT).pack(side="left", padx=(10, 0))
+
+        # ── Bottom action bar ───────────────────────────────────────────────
         bar = tk.Frame(self.root, bg=BG)
         bar.pack(fill="x", padx=10, pady=10)
 
-        tk.Label(bar, text="Mining Duration (s):", bg=BG, fg=TEXT, font=FONT).pack(side="left")
-        self.var_mining = tk.StringVar(value=str(self.config["general"].get("mining_duration", 14.0)))
-        tk.Entry(bar, textvariable=self.var_mining, bg=SURFACE2, fg=TEXT, width=5).pack(side="left", padx=5)
+        tk.Button(bar, text="💾 Save", bg=SURFACE2, fg=TEXT, font=FONT_BOLD, command=self._save_config).pack(side="left")
 
-        tk.Button(bar, text="💾 Save", bg=SURFACE2, fg=TEXT, font=FONT_BOLD, command=self._save_config).pack(side="left", padx=(15, 0))
-        tk.Button(bar, text="▶ Run Bot", bg=GREEN, fg="black", font=FONT_BOLD, command=self._run_bot).pack(side="right")
+        self.btn_stop = tk.Button(bar, text="⏹ Stop Bot", bg=RED, fg="white", font=FONT_BOLD, command=self._stop_bot, state="disabled")
+        self.btn_stop.pack(side="right", padx=(5, 0))
+
+        self.btn_run = tk.Button(bar, text="▶ Run Bot", bg=GREEN, fg="black", font=FONT_BOLD, command=self._run_bot)
+        self.btn_run.pack(side="right")
 
         self._refresh_maps()
 
@@ -260,12 +319,36 @@ class FerGUI:
         self._listener = keyboard.Listener(on_press=self._on_key)
         self._listener.start()
 
-    # ── Launch bot ──────────────────────────────────────────────────────────
+    # ── Bot process management ──────────────────────────────────────────────
 
     def _run_bot(self):
+        if self.bot_process and self.bot_process.poll() is None:
+            messagebox.showinfo("Info", "Bot is already running!")
+            return
         self._save_config()
-        self.root.iconify()
-        subprocess.Popen([sys.executable, "farm_fer.py"])
+        self.bot_process = subprocess.Popen(
+            [sys.executable, "farm_fer.py"],
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+        self.btn_run.config(state="disabled", bg=DIM)
+        self.btn_stop.config(state="normal")
+
+    def _stop_bot(self):
+        if self.bot_process and self.bot_process.poll() is None:
+            self.bot_process.terminate()
+            self.bot_process.wait(timeout=5)
+        self.bot_process = None
+        self.btn_run.config(state="normal", bg=GREEN)
+        self.btn_stop.config(state="disabled")
+
+    def _poll_bot_status(self):
+        """Check every second if the bot process is still alive."""
+        if self.bot_process and self.bot_process.poll() is not None:
+            # Bot exited on its own
+            self.bot_process = None
+            self.btn_run.config(state="normal", bg=GREEN)
+            self.btn_stop.config(state="disabled")
+        self.root.after(1000, self._poll_bot_status)
 
 
 if __name__ == "__main__":

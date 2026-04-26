@@ -54,16 +54,18 @@ def grab_hsv(sct: mss.mss) -> tuple[np.ndarray, int, int]:
 
 
 def find_park_position(sct: mss.mss, nodes: list) -> tuple[int, int]:
-    """Return a safe cursor-park position on the same monitor as the nodes."""
+    """Return a safe cursor-park position on the same monitor as the nodes.
+
+    Parks at +100px from the monitor corner to avoid triggering failsafe.
+    """
     if not nodes:
-        return (10, 10)
-    # Use the first node to figure out which physical monitor the game is on
+        return (100, 100)
     nx, ny = nodes[0]["x"], nodes[0]["y"]
-    for mon in sct.monitors[1:]:  # skip index 0 (virtual screen)
+    for mon in sct.monitors[1:]:
         if (mon["left"] <= nx < mon["left"] + mon["width"]
                 and mon["top"] <= ny < mon["top"] + mon["height"]):
-            return (mon["left"] + 10, mon["top"] + 10)
-    return (10, 10)
+            return (mon["left"] + 100, mon["top"] + 100)
+    return (100, 100)
 
 
 def hsv_match(pixel, target, tolerance: int) -> bool:
@@ -139,7 +141,7 @@ def main() -> None:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         cfg = json.load(f)
 
-    pyautogui.FAILSAFE = cfg.get("general", {}).get("failsafe", True)
+    pyautogui.FAILSAFE = cfg.get("general", {}).get("failsafe", False)
 
     maps = cfg.get("maps", [])
     if not maps:
@@ -150,7 +152,7 @@ def main() -> None:
     log.info("Resource Farming Bot Started")
     log.info("Maps: %d | Cooldown: %ds every %dm", len(maps), COOLDOWN_DURATION, COOLDOWN_INTERVAL // 60)
     log.info("=" * 50)
-    log.info("Ctrl+C to stop | Mouse → top-left corner for failsafe\n")
+    log.info("Use the GUI Stop button or Ctrl+C to stop\n")
 
     try:
         with mss.mss() as sct:
