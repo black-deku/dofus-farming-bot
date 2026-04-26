@@ -40,11 +40,17 @@ log = logging.getLogger("farm_fer")
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
-def grab_hsv(sct: mss.mss) -> np.ndarray:
-    """Full-screen capture returned as an HSV numpy array."""
-    shot = sct.grab(sct.monitors[1])
+def grab_hsv(sct: mss.mss) -> tuple[np.ndarray, int, int]:
+    """Capture ALL monitors and return (hsv_frame, offset_x, offset_y).
+
+    Uses monitors[0] (the virtual screen spanning every display) so
+    coordinates captured via pyautogui on any monitor work correctly.
+    """
+    mon = sct.monitors[0]  # full virtual screen
+    shot = sct.grab(mon)
     bgr = cv2.cvtColor(np.array(shot), cv2.COLOR_BGRA2BGR)
-    return cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    return hsv, mon["left"], mon["top"]
 
 
 def hsv_match(pixel, target, tolerance: int) -> bool:
@@ -78,13 +84,14 @@ def process_map(map_data: dict, cfg: dict, sct: mss.mss) -> int:
     pyautogui.moveTo(*MOUSE_PARK, duration=0.0)
     time.sleep(0.05)
 
-    hsv_frame = grab_hsv(sct)
+    hsv_frame, ox, oy = grab_hsv(sct)
     clicked = 0
 
     for i, node in enumerate(nodes, 1):
         x, y = node["x"], node["y"]
         target = node.get("hsv", default_hsv)
-        pixel = hsv_frame[y][x]
+        # Convert absolute screen coords to frame-relative coords
+        pixel = hsv_frame[y - oy][x - ox]
 
         if not hsv_match(pixel, target, tolerance):
             continue
