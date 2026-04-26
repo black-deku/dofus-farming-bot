@@ -295,6 +295,14 @@ class FerGUI:
             return [int(c) for c in hsv[0][0]]
 
     def _on_key(self, key):
+        # K key = kill bot (works globally, no map selection needed)
+        try:
+            if hasattr(key, "char") and key.char == "k":
+                self.root.after(0, self._stop_bot)
+                return
+        except AttributeError:
+            pass
+
         if self.selected_map_idx is None:
             return
 
