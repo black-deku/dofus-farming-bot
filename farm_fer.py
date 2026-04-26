@@ -25,7 +25,7 @@ import pyautogui
 CONFIG_PATH = Path("fer_config.json")
 COOLDOWN_INTERVAL = 4 * 60  # seconds between cooldowns
 COOLDOWN_DURATION = 10       # seconds to pause during cooldown
-MOUSE_PARK = (10, 10)        # neutral corner to park the cursor before scanning
+
 
 # ── Setup ───────────────────────────────────────────────────────────────────
 pyautogui.PAUSE = 0.01
@@ -51,6 +51,19 @@ def grab_hsv(sct: mss.mss) -> tuple[np.ndarray, int, int]:
     bgr = cv2.cvtColor(np.array(shot), cv2.COLOR_BGRA2BGR)
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     return hsv, mon["left"], mon["top"]
+
+
+def find_park_position(sct: mss.mss, nodes: list) -> tuple[int, int]:
+    """Return a safe cursor-park position on the same monitor as the nodes."""
+    if not nodes:
+        return (10, 10)
+    # Use the first node to figure out which physical monitor the game is on
+    nx, ny = nodes[0]["x"], nodes[0]["y"]
+    for mon in sct.monitors[1:]:  # skip index 0 (virtual screen)
+        if (mon["left"] <= nx < mon["left"] + mon["width"]
+                and mon["top"] <= ny < mon["top"] + mon["height"]):
+            return (mon["left"] + 10, mon["top"] + 10)
+    return (10, 10)
 
 
 def hsv_match(pixel, target, tolerance: int) -> bool:
@@ -80,8 +93,9 @@ def process_map(map_data: dict, cfg: dict, sct: mss.mss) -> int:
     nodes = map_data.get("nodes", [])
     log.info("🗺️  Map: %s (%d nodes)", map_name, len(nodes))
 
-    # Park cursor away from nodes so the screenshot has no hover highlight
-    pyautogui.moveTo(*MOUSE_PARK, duration=0.0)
+    # Park cursor on the same monitor as the game, away from nodes
+    park = find_park_position(sct, nodes)
+    pyautogui.moveTo(*park, duration=0.0)
     time.sleep(0.05)
 
     hsv_frame, ox, oy = grab_hsv(sct)
