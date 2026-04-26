@@ -62,14 +62,10 @@ def hsv_match(pixel, target, tolerance: int) -> bool:
 # ── Map Processing ─────────────────────────────────────────────────────────
 
 def process_map(map_data: dict, cfg: dict, sct: mss.mss) -> int:
-    """Scan & harvest all nodes on one map, then transition.
-
-    Returns the number of nodes that were queued for collection.
-    """
+    """Scan & click all nodes on one map, then transition. No waiting."""
     gen = cfg.get("general", {})
     tolerance = gen.get("iron_hsv_tolerance", 30)
     default_hsv = gen.get("iron_hsv_target", [0, 0, 100])
-    mining_dur = gen.get("mining_duration", 5.0)
     move_dur = gen.get("mouse_move_duration", 0.2)
     off_x = gen.get("collect_offset_x", 40)
     off_y = gen.get("collect_offset_y", 40)
@@ -83,7 +79,7 @@ def process_map(map_data: dict, cfg: dict, sct: mss.mss) -> int:
     time.sleep(0.05)
 
     hsv_frame = grab_hsv(sct)
-    queued = 0
+    clicked = 0
 
     for i, node in enumerate(nodes, 1):
         x, y = node["x"], node["y"]
@@ -93,35 +89,23 @@ def process_map(map_data: dict, cfg: dict, sct: mss.mss) -> int:
         if not hsv_match(pixel, target, tolerance):
             continue
 
-        log.info("  ⛏️  [%d/%d] Iron at (%d, %d) → collecting", i, len(nodes), x, y)
+        log.info("  ⛏️  [%d/%d] Iron at (%d, %d) → click", i, len(nodes), x, y)
         pyautogui.moveTo(x, y, duration=0.0)
         pyautogui.click(x, y)
         time.sleep(0.15)
         pyautogui.click(x + off_x, y + off_y)
-        queued += 1
+        clicked += 1
 
-    # Wait for all queued mining to finish before leaving the map
+    # Transition to next map (no mining wait)
     transition = map_data.get("transition_zone")
     if transition:
-        if queued > 0:
-            wait = queued * mining_dur
-            log.info("  ⏳ Waiting %.1fs for %d node(s) to finish mining…", wait, queued)
-            time.sleep(wait)
-
         tx, ty = transition["x"], transition["y"]
         log.info("  🏃 Transition → (%d, %d)", tx, ty)
         pyautogui.moveTo(tx, ty, duration=move_dur)
         pyautogui.click(tx, ty)
         time.sleep(gen.get("map_transition_duration", 4.0))
-    else:
-        if queued > 0:
-            wait = queued * mining_dur
-            log.info("  ⏳ Waiting %.1fs for %d node(s) to finish mining…", wait, queued)
-            time.sleep(wait)
-        else:
-            time.sleep(0.01)
 
-    return queued
+    return clicked
 
 
 # ── Main Loop ──────────────────────────────────────────────────────────────
