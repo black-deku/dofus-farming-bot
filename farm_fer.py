@@ -53,19 +53,6 @@ def grab_hsv(sct: mss.mss) -> tuple[np.ndarray, int, int]:
     return hsv, mon["left"], mon["top"]
 
 
-def find_park_position(sct: mss.mss, nodes: list) -> tuple[int, int]:
-    """Return a safe cursor-park position on the same monitor as the nodes.
-
-    Parks at +100px from the monitor corner to avoid triggering failsafe.
-    """
-    if not nodes:
-        return (100, 100)
-    nx, ny = nodes[0]["x"], nodes[0]["y"]
-    for mon in sct.monitors[1:]:
-        if (mon["left"] <= nx < mon["left"] + mon["width"]
-                and mon["top"] <= ny < mon["top"] + mon["height"]):
-            return (mon["left"] + 100, mon["top"] + 100)
-    return (100, 100)
 
 
 def hsv_match(pixel, target, tolerance: int) -> bool:
@@ -95,10 +82,7 @@ def process_map(map_data: dict, cfg: dict, sct: mss.mss) -> int:
     nodes = map_data.get("nodes", [])
     log.info("🗺️  Map: %s (%d nodes)", map_name, len(nodes))
 
-    # Park cursor on the same monitor as the game, away from nodes
-    park = find_park_position(sct, nodes)
-    pyautogui.moveTo(*park, duration=0.0)
-    time.sleep(0.05)
+
 
     hsv_frame, ox, oy = grab_hsv(sct)
     clicked = 0
